@@ -1,6 +1,5 @@
 import os
 import platform
-import pyaudio
 import subprocess
 import wave
 import time
@@ -14,7 +13,7 @@ FFMPEG = "ffmpeg"
 
 
 def create_wav_from_mp4(filepath: str):
-    subprocess.call(f'ffmpeg -y -i {filepath}.mp4 {filepath}.wav')
+    subprocess.call(f'ffmpeg -y -i "{filepath}.mp4" "{filepath}.wav"')
 
 
 def get_mp4_path(mp4_path: str):
@@ -46,23 +45,26 @@ def creation_date(path_to_file):
     last modified if that isn't possible.
     See http://stackoverflow.com/a/39501288/1709587 for explanation.
     """
-    if platform.system() == 'Windows':
-        return os.path.getmtime(path_to_file)
-    else:
-        stat = os.stat(path_to_file)
-        try:
-            return stat.st_birthtime
-        except AttributeError:
-            # We're probably on Linux. No easy way to get creation dates here,
-            # so we'll settle for when its content was last modified.
-            return stat.st_mtime
+    try:
+        if platform.system() == 'Windows':
+            return os.path.getmtime(path_to_file)
+        else:
+            stat = os.stat(path_to_file)
+            try:
+                return stat.st_birthtime
+            except AttributeError:
+                # We're probably on Linux. No easy way to get creation dates here,
+                # so we'll settle for when its content was last modified.
+                return stat.st_mtime
+    except:
+        return -1
 
 
 def check_if_file_created(path_to_file: str):
     current_time = time.time()
     try:
         when_created = creation_date(path_to_file)
-        if current_time > when_created:
+        if when_created == -1 or current_time < when_created:
             return False
         else:
             return True
@@ -81,30 +83,10 @@ class AudioFile:
         self.chunk = 1024
         # list of words we load into the audiofile
         self.list_of_words: List[Word] = None
-
-
-    def play(self):
-        f = wave.open(self.filepath + WAV, "rb")
-        p = pyaudio.PyAudio()
-        # open stream
-        stream = p.open(format=p.get_format_from_width(f.getsampwidth()),
-                        channels=f.getnchannels(),
-                        rate=f.getframerate(),
-                        output=True)
-        # read data
-        data = f.readframes(self.chunk)
-
-        # play stream-
-        while data:
-            stream.write(data)
-            data = f.readframes(self.chunk)
-
-            # stop stream
-        stream.stop_stream()
-        stream.close()
+        # self.additional_times: List[TimeSegment] = []
 
         # close PyAudio
-        p.terminate()
+        # p.terminate()
 
     def get_output_file_name(self, file_save_name=''):
         if file_save_name == '':
@@ -121,11 +103,18 @@ class AudioFile:
         #     file_save_name = f'{self.directory_path}/{file_save_name}'
         file_save_name = self.get_output_file_name(file_save_name)
         # current_time = time.time()
+        print(self.filepath + ".mp4")
+        print(inside)
+        print(file_save_name + ".mp4")
         subprocess \
-            .call(f'ffmpeg -y -i {self.filepath + ".mp4"} -af "{inside}" {file_save_name}')
-        if not check_if_file_created(file_save_name):
+            .call(f'ffmpeg -y -i "{self.filepath + ".mp4"}" -af "{inside}" "{file_save_name + ".mp4"}"')
+        if not check_if_file_created(file_save_name + ".mp4"):
             messagebox.showerror("Export error!",
                                  "There was an error when trying to export the redacted file. Please try again.")
+            return ""
+        messagebox.showinfo("Export success!")
+        return file_save_name
+
         # try:
         #     when_created = creation_date(file_save_name)
         #     if current_time > when_created:
@@ -142,10 +131,6 @@ class AudioFile:
     def get_words(self):
         return self.list_of_words
 
-    def set_is_word_censored(self, index, is_censored):
-        if self.list_of_words[index]:
-            self.list_of_words[index].is_censored = is_censored
-
     def create_ffmpeg_string(self, additional_times: List[TimeSegment]) -> str:
         all_times: List[TimeSegment] = [word.time_segment for word in self.list_of_words if word.is_censored] \
                                        + additional_times
@@ -156,4 +141,5 @@ class AudioFile:
         # inside = "volume=enable='between(t,5,10)':volume=0, volume=enable='between(t,45,55)':volume=0"
 
         return ", ".join(["volume=enable='between(t,{start},{end})':volume=0"
-                         .format(start=time_segment.start, end=time_segment.end) for time_segment in final_times])
+                         .format(start=time_segment.start.value, end=time_segment.end.value)
+                          for time_segment in final_times])
