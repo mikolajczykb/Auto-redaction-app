@@ -13,6 +13,8 @@ FFMPEG = "ffmpeg"
 
 
 def create_wav_from_mp4(filepath: str):
+    if os.path.isfile(f"{filepath}.wav"):
+        return
     subprocess.call(f'ffmpeg -y -i "{filepath}.mp4" "{filepath}.wav"')
 
 
@@ -130,6 +132,14 @@ class AudioFile:
 
     def get_words(self):
         return self.list_of_words
+
+    def sort_words_by(self, column, reverse):
+        if column == 'start':
+            self.list_of_words.sort(key=lambda word: getattr(word, 'time_segment').start.value, reverse=reverse)
+        elif column == 'end':
+            self.list_of_words.sort(key=lambda word: getattr(word, 'time_segment').end.value, reverse=reverse)
+        else:
+            self.list_of_words.sort(key=lambda word: getattr(word, column), reverse=reverse)
 
     def create_ffmpeg_string(self, additional_times: List[TimeSegment]) -> str:
         all_times: List[TimeSegment] = [word.time_segment for word in self.list_of_words if word.is_censored] \

@@ -32,6 +32,11 @@ class Screen(Frame):
         # Getting frame ID
         return self.winfo_id()
 
+    def reset_instance(self, _source):
+        self.instance = vlc.Instance()
+        self.player = self.instance.media_player_new()
+        self.load_video(_source)
+
     def load_video(self, _source):
         # Function to start player from given source
         media = self.instance.media_new(_source)
@@ -44,10 +49,11 @@ class Screen(Frame):
         self.player.pause()
 
     def play(self):
+        self.player.play()
+
+    def pause(self):
         if self.player.is_playing() and self.player.will_play():
             self.player.pause()
-        else:
-            self.player.play()
 
     def skip_forward(self):
         current_time = self.player.get_time()

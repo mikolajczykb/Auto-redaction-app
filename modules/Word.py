@@ -3,19 +3,20 @@ import re
 from math import modf as math_modf
 import numpy as np
 
-
+# move this to class
 def convert_seconds_to_timestamp_format(seconds: float) -> str:
     frac, whole = math_modf(seconds)
     minutes = int(whole / 60)
     seconds = int(whole % 60)
     miliseconds = int(round(frac, 3) * 1000)
-    return f'{minutes}:{seconds if seconds > 10 else "0" + str(seconds)}:{miliseconds}'
+    return f'{minutes}:{seconds if seconds > 10 else "0" + str(seconds)}:{miliseconds if miliseconds > 0 else "000"}'
 
 
 def check_if_correct_timestamp_format(timestamp: str) -> bool:
     return True if re.match(r'^(?:\d+):(?:[0-5]\d)(?::\d\d\d)?$', timestamp) else False
 
 
+# move this to class
 def convert_timestamp_to_second_format(timestamp: str) -> float:
     total: float = 0
     if check_if_correct_timestamp_format(timestamp):
@@ -58,14 +59,14 @@ class Word:
         self.confidence = config["conf"]
         self.time_segment = TimeSegment(config)
         self.word: str = config["word"]
-        lemmatizer = WordNetLemmatizer()
-        self.lemmatized_word: str = lemmatizer.lemmatize(self.word)
-        self.is_censored = False
+        if hasattr(config, 'is_censored'):
+            self.is_censored = config['is_censored']
+        else:
+            self.is_censored = False
 
     def __str__(self):
-        return "{:20} from {:.2f} sec to {:.2f} sec, confidence is {:.2f}%, lemmatized = {}" \
-            .format(self.word, self.time_segment.start, self.time_segment.end, self.confidence * 100,
-                    self.lemmatized_word)
+        return "{:20} from {:.2f} sec to {:.2f} sec, confidence is {:.2f}%" \
+            .format(self.word, self.time_segment.start, self.time_segment.end, self.confidence * 100)
 
 
 if __name__ == "__main__":

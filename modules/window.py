@@ -1,13 +1,17 @@
+import jsonpickle
+import os.path
 from tkinter import *
 from tkinter import filedialog, messagebox, ttk, font, simpledialog
 from pathlib import Path
 from modules.AudioFile import get_mp4_path, create_wav_from_mp4, check_if_file_created, AudioFile, TimeSegment
 from modules.speech_to_text import speech_to_words
 from modules.Word import check_if_correct_timestamp_format, convert_timestamp_to_second_format,\
-    convert_seconds_to_timestamp_format
+    convert_seconds_to_timestamp_format, Word
 from modules.Screen import Screen
+from typing import List
 from vosk import Model
 import subprocess
+from enum import Enum
 from tkVideoPlayer import TkinterVideo
 
 base_path = str(Path(__file__).parent).replace('\\', '/')
@@ -21,6 +25,14 @@ COL_WIDTHS = {
     "conf": 57,
     "censor": 53,
 }
+
+class WordEnum(Enum):
+    word = '#1'
+    start = '#2'
+    end = '#3'
+    confidence = '#4'
+    is_censored = '#5'
+
 
 FFMPEG = "ffmpeg"
 
@@ -49,6 +61,15 @@ class App:
         self.audio_file: AudioFile = None
         self.model: Model = None
         self.video_duration_in_milliseconds = None
+        self.model_path = None
+        # move this into custom treeview class
+        self.reverses = {
+            'word_reverse': False,
+            'start_reverse': False,
+            'end_reverse': False,
+            'confidence_reverse': False,
+            'is_censored_reverse': False
+        }
         self.set_up_window()
         self.start_app()
 
@@ -95,7 +116,7 @@ class App:
             image=self.save_button_img,
             borderwidth=0,
             highlightthickness=0,
-            command=btn_clicked,
+            command=self.save_project,
             relief="flat")
 
         self.save_button.place(
@@ -160,7 +181,7 @@ class App:
             image=self.load_button_img,
             borderwidth=0,
             highlightthickness=0,
-            command=btn_clicked,
+            command=self.load_project,
             relief="flat")
 
         self.load_button.place(
@@ -212,7 +233,7 @@ class App:
             image=self.pause_button_img,
             borderwidth=0,
             highlightthickness=0,
-            command=self.play_pause,
+            command=self.pause,
             relief="flat")
 
         self.pause_button.place(
@@ -225,7 +246,7 @@ class App:
             image=self.play_button_img,
             borderwidth=0,
             highlightthickness=0,
-            command=self.play_pause,
+            command=self.play,
             relief="flat")
 
         self.play_button.place(
@@ -293,6 +314,8 @@ class App:
         self.words_display = ttk.Treeview(self.words_frame, yscrollcommand=self.words_scroll.set)
         self.words_display.pack()
         self.words_display.bind("<Double-1>", self.censor_selected_word)
+        self.words_display.bind("<Button-3>", self.popup_selection_menu)
+        self.words_display.bind("<Button-1>", self.sort_word_treeview)
 
         self.words_scroll.config(command=self.words_display.yview)
 
@@ -300,11 +323,18 @@ class App:
         self.words_display.column("#0", width=0, stretch=NO)
         for col_name in COL_WIDTHS:
             self.words_display.column(col_name, width=COL_WIDTHS[col_name], anchor=CENTER)
+        self.words_display.heading("#0", text="", anchor=CENTER)
+        for col_name in COL_WIDTHS:
+            self.words_display.heading(col_name, text=col_name.capitalize(), anchor=CENTER)
+        # self.additional_times_display.heading("start", text="Start", anchor=CENTER)
+        # self.additional_times_display.heading("end", text="End", anchor=CENTER)
 
         self.additional_times_frame = Frame(self.window, background="#ffffff",
                                             highlightbackground="#A3C4D7",
                                             highlightthickness=0
                                             )
+
+
         self.additional_times_frame.place(x=584, y=363, width=458, height=110)
 
         self.additional_times_scroll = Scrollbar(self.additional_times_frame)
@@ -335,14 +365,74 @@ class App:
         self.set_load_state(DISABLED)
 
     def censor_selected_word(self, event):
-        selected = self.words_display.focus()
-        word_index = int(self.words_display.identify_row(event.y)) - 1
-        word_selected = self.audio_file.list_of_words[word_index]
-        word_selected.is_censored = not word_selected.is_censored
-        self.words_display.item(selected, text="", values=(
-            word_selected.word, str(word_selected.time_segment.start), str(word_selected.time_segment.end),
-            word_selected.confidence, word_selected.is_censored
-        ))
+        selected = list(self.words_display.selection())
+        # print("FOCUS:", self.words_display.focus())
+        # print("SELCTED:", selected)
+        # self.words_display.selection_set(self.words_display.focus())
+        selected = selected + [self.words_display.focus()]
+        row_selected = self.words_display.identify_row(event.y)
+        # print(row_selected)
+        if row_selected == '':
+            return
+
+        # word_index = int(self.words_display.identify_row(event.y)) - 1
+        for selection in selected:
+            if selection == '':
+                continue
+            word_index = int(selection) - 1
+            word_selected = self.audio_file.list_of_words[word_index]
+            word_selected.is_censored = not word_selected.is_censored
+            self.words_display.item(selection, text="", values=(
+                word_selected.word, str(word_selected.time_segment.start), str(word_selected.time_segment.end),
+                word_selected.confidence, word_selected.is_censored
+            ))
+        # selected = selected[0]
+        # word_index = int(selected) - 1
+        # # print(word_index)
+        # word_selected = self.audio_file.list_of_words[word_index]
+        # word_selected.is_censored = not word_selected.is_censored
+        # self.words_display.item(selected, text="", values=(
+        #     word_selected.word, str(word_selected.time_segment.start), str(word_selected.time_segment.end),
+        #     word_selected.confidence, word_selected.is_censored
+        # ))
+
+    def sort_word_treeview(self, event):
+        # selected = self.words_display.focus()
+        row_selected = self.words_display.identify_row(event.y)
+        column_selected = self.words_display.identify_column(event.x)
+        # self.clear_words_display()
+        if row_selected == '':
+            self.clear_words_display()
+            column_name = WordEnum(column_selected).name
+            self.audio_file.sort_words_by(column_name, reverse=self.reverses[f'{column_name}_reverse'])
+            self.reverses[f'{column_name}_reverse'] = not self.reverses[f'{column_name}_reverse']
+            self.set_words_display(self.audio_file.list_of_words)
+            # if column_selected == '#1':
+
+    def popup_selection_menu(self, event):
+        m = Menu(self.window, tearoff=0)
+        m.add_command(label="Select all instances of word", command=lambda: self.select_all_instances_of_word(event))
+        m.add_command(label="Select all words", command=lambda: self.select_all_words(event))
+        m.add_separator()
+        m.add_command(label="Censor / uncensor selected words", command=lambda: self.censor_selected_word(event))
+        try:
+            m.tk_popup(event.x_root, event.y_root)
+        finally:
+            m.grab_release()
+
+    def select_all_instances_of_word(self, event):
+        selected_row: str = self.words_display.identify_row(event.y)
+        if selected_row != '':
+            word_selected = self.audio_file.list_of_words[int(selected_row) - 1]
+            filtered_rows = filter(lambda word: word_selected.word == self.words_display.item(word)["values"][0],
+                                   self.words_display.get_children())
+            # for row_number in filtered_rows:
+            self.words_display.selection_set(*filtered_rows)
+
+    def select_all_words(self, event):
+        selected_row = self.words_display.identify_row(event.y)
+        if selected_row != '':
+            self.words_display.selection_set(self.words_display.get_children())
 
     def start_app(self):
         self.window.resizable(False, False)
@@ -357,7 +447,6 @@ class App:
             messagebox.showerror("Error when loading project",
                                  "A file not supported by the application was selected. Please try again.")
             return
-        self.audio_file = AudioFile(f'{get_mp4_path(f.name)}')
 
         vosk_f = filedialog.askdirectory(
             title="Select Vosk model directory to convert speech to text, or cancel if model was loaded before.",
@@ -368,17 +457,24 @@ class App:
             return
         # do threading here and make it change a variable
         # self.vid_player.load(self.audio_file.filepath + ".mp4")
+        self.prepare_video_and_model(f.name, vosk_f)
+        if self.video_frame.player.will_play():
+            self.window.after(10, self.refresh_current_time)
+
+    def prepare_video_and_model(self, video_file_path, model_path):
+        self.audio_file = AudioFile(f'{video_file_path}')
+        # print(f'VIDEO PATH: {get_mp4_path(video_file_path)}')
         if self.model is None:
             try:
-                self.model = Model(model_path=vosk_f)
+                self.model = Model(model_path=model_path)
+                self.model_path = model_path
             except:
                 messagebox.showerror("Error when creating model",
                                      "A directory not containing a vosk model was selected. Please try again.")
-        self.video_frame.load_video(self.audio_file.filepath + ".mp4")
+        # self.video_frame.load_video(self.audio_file.filepath + ".mp4")
+        self.video_frame.reset_instance(self.audio_file.filepath + ".mp4")
         self.set_load_state(ACTIVE)
         self.reset_video()
-        if self.video_frame.player.will_play():
-            self.window.after(10, self.refresh_current_time)
 
     def reset_video(self):
         self.progress_var.set(0)
@@ -390,6 +486,7 @@ class App:
             button["state"] = state
 
     def get_speech_to_text(self):
+        self.video_frame.pause()
         if self.model and self.audio_file:
             # get wav file before that
             # subprocess.call(f'ffmpeg -y -i {get_mp4_path(audio_path)}.mp4 {get_mp4_path(audio_path)}.wav')
@@ -404,28 +501,54 @@ class App:
 
             self.clear_words_display()
 
-            if self.words_display:
-                index = 1
-                for word in self.audio_file.get_words():
-                    self.words_display.insert(parent='', index='end', iid=index, text='',
-                                              values=(
-                                                  word.word, str(word.time_segment.start), str(word.time_segment.end),
-                                                  word.confidence, word.is_censored))
-                    index += 1
+            self.set_words_display(list_of_words=self.audio_file.get_words())
+            # if self.words_display:
+            #     index = 1
+            #     for word in self.audio_file.get_words():
+            #         self.words_display.insert(parent='', index='end', iid=index, text='',
+            #                                   values=(
+            #                                       word.word, str(word.time_segment.start), str(word.time_segment.end),
+            #                                       word.confidence, word.is_censored))
+            #         index += 1
+
+    def set_words_display(self, list_of_words: List[Word]):
+        self.audio_file.list_of_words = list_of_words
+
+        if self.words_display:
+            index = 1
+            for word in list_of_words:
+                self.words_display.insert(parent='', index='end', iid=index, text='',
+                                          values=(
+                                              word.word, str(word.time_segment.start), str(word.time_segment.end),
+                                              word.confidence, word.is_censored))
+                index += 1
 
     def clear_words_display(self):
         if self.words_display:
             for item in self.words_display.get_children():
                 self.words_display.delete(item)
 
+    def set_additional_times_display(self, additional_times: List[TimeSegment]):
+        if self.additional_times_display:
+            index = 1
+            for time in additional_times:
+                print(time.start.value, time.end.value)
+                print(convert_seconds_to_timestamp_format(time.start.value), convert_seconds_to_timestamp_format(time.end.value))
+                self.add_additional_time(convert_seconds_to_timestamp_format(time.start.value),
+                                         convert_seconds_to_timestamp_format(time.end.value))
+
     def clear_additional_times_display(self):
         if self.additional_times_display:
             for item in self.additional_times_display.get_children():
                 self.additional_times_display.delete(item)
 
-    def add_additional_time(self):
+    def set_text(self, text):
+        self.export_name.delete(1.0, END)
+        self.export_name.insert(1.0, text)
+
+    def add_additional_time(self, start_value='00:00:00', end_value='00:00:00'):
         self.additional_times_display.insert(parent='', index='end', iid=0,
-                                             values=('00:00:000', '00:00:000'))
+                                             values=(start_value, end_value))
 
     def remove_additional_time(self):
         selected_item = self.additional_times_display.focus()
@@ -475,8 +598,10 @@ class App:
 
     def get_additional_time_from_display(self):
         additional_times = []
+        print("GET ADDITIONAL TIME FROM DISPLAY")
         for line in self.additional_times_display.get_children():
             start, end = self.additional_times_display.item(line)['values']
+            print(start, end)
             additional_times.append(TimeSegment({
                 'start': convert_timestamp_to_second_format(start),
                 'end': convert_timestamp_to_second_format(end)
@@ -495,14 +620,17 @@ class App:
     def update_time(self):
         selection: float = self.progress_var.get() / 100
 
-        self.video_duration_in_milliseconds = self.video_frame.get_video_length()
+        self.video_duration_in_milliseconds = max(self.video_frame.get_video_length(), 1)
         current_time_in_milliseconds = int(selection * self.video_duration_in_milliseconds)
 
         self.video_frame.set_current_time(current_time_in_milliseconds)
         self.current_time.set(convert_seconds_to_timestamp_format(current_time_in_milliseconds / 1000))
 
-    def play_pause(self):
+    def play(self):
         self.video_frame.play()
+
+    def pause(self):
+        self.video_frame.pause()
 
     def refresh_current_time(self):
         current_time_in_milliseconds = self.video_frame.get_current_time()
@@ -519,11 +647,103 @@ class App:
         self.video_frame.reverse_back()
 
     def save_project(self):
+        f = filedialog.asksaveasfile(mode='w', initialdir="./projects", defaultextension=".json")
+        if f is None:
+            return
+        export_input = self.export_name.get("1.0", END).strip()
         additional_times = self.get_additional_time_from_display()
+        additional_times = list(map(lambda time: {
+            'start': time.start.value,
+            'end': time.end.value,
+        }, additional_times))
+        print(additional_times)
+        list_of_words = list(map(lambda word: {
+            'conf': word.confidence,
+            'word': word.word,
+            'is_censored': word.is_censored,
+            'start': word.time_segment.start.value,
+            'end': word.time_segment.end.value
+        }, self.audio_file.list_of_words))
+        print(list_of_words)
+        print(self.audio_file.filepath)
+        print(self.model_path)
+        print(export_input)
         saveObj = {
             'additional_times': additional_times,
-            'list_of_words': self.audio_file.list_of_words,
+            'list_of_words': list_of_words,
+            'video_file_path': self.audio_file.filepath,
+            'model_path': self.model_path,
+            'project_name': export_input
         }
+        f.write(jsonpickle.encode(saveObj))
+
+    # def check_if_json_supports_project(self, project_json):
+    #     keys = project_json.keys()
+    #     # if hasattr(project_json, 'additional_times') and hasattr(project_json, 'list_of_words') \
+    #     #         and hasattr(project_json, 'video_file_path') and hasattr(project_json, 'model_path'):
+    #     #     return True
+    #     if ('additional_times' in keys) and ('list_of_words' in keys) and ('video_file_path' in keys) and ('model_path' in keys) and ('project_name' in keys):
+    #         return True
+    #     return False
 
     def load_project(self):
-        pass
+        self.set_load_state(DISABLED)
+        f = filedialog.askopenfile(title="Select project JSON to load into file", initialdir="./sound_files/mp4_files")
+        if f is None:
+            return
+        if not os.path.isfile(f.name):
+            messagebox.showerror("File was not found!")
+        with open(f.name) as f:
+            project_json = jsonpickle.decode(f.read())
+            project_json = ProjectJSON(project_json)
+        # if not self.check_if_json_supports_project(project_json=project_json):
+        #     messagebox.showerror("JSON has wrong format!")
+        # try:
+        # additional_times = project_json['additional_times']
+        # map(lambda time: print(time), project_json.additional_times)
+        additional_times = []
+        for time in project_json.additional_times:
+            additional_times.append(TimeSegment(time))
+        # map(lambda word: print(word), project_json.list_of_words)
+        list_of_words = []
+        for word in project_json.list_of_words:
+            list_of_words.append(Word(word))
+        # additional_times = list(map(lambda time: TimeSegment(time), project_json.additional_times))
+        # list_of_words = project_json['list_of_words']
+        # list_of_words = list(map(lambda word: Word(word), project_json.list_of_words))
+        # list_of_words = [
+        #
+        # ]
+        # additional_times = []
+        video_file_path = project_json.video_file_path
+        model_path = project_json.model_path
+        project_name = project_json.project_name
+        print(video_file_path)
+        print(model_path)
+        try:
+            self.prepare_video_and_model(video_file_path, model_path)
+        except:
+            messagebox.showerror("Failed at setting up video and model!")
+        try:
+            self.set_words_display(list_of_words)
+        except:
+            messagebox.showerror("Failed at setting up list of words")
+        try:
+            self.set_additional_times_display(additional_times)
+        except:
+            messagebox.showerror("Failed at setting up additional times!")
+        # try:
+        self.set_text(project_name)
+        # except:
+            # messagebox.showerror("Failed at setting up project name!")
+        # except:
+        #     messagebox.showerror("JSON has wrong format!")
+
+
+class ProjectJSON:
+    def __init__(self, config):
+        self.additional_times = config['additional_times']
+        self.list_of_words = config['list_of_words']
+        self.video_file_path = config['video_file_path']
+        self.model_path = config['model_path']
+        self.project_name = config['project_name']
