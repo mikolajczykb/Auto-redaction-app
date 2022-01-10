@@ -1,4 +1,4 @@
-from modules.AudioFile import AudioFile, get_mp4_path
+from modules.AudioFile import AudioFile, get_path_without_mp4
 from modules.Word import TimeSegment
 from modules.speech_to_text import speech_to_words
 import tkinter as tk
@@ -16,7 +16,7 @@ if __name__ == "__main__":
     # print(check_ffmpeg())
     # model_path = "models/vosk-model-en-us-0.22"
     # audio_path = "C:/Users/uncha/Desktop/inzynierka/sound_files/mp4_files/VID_20170429_014159.649.mp4"
-    # print(get_mp4_path(audio_path))
+    # print(get_path_without_mp4(audio_path))
     #
     # # konwersja mp4 do wav
     #
@@ -30,10 +30,10 @@ if __name__ == "__main__":
     #
     # # subprocess.call(f'ffmpeg -i {audio_path_mp4} -af "{ inside }" ./sound_files/mp4_files/output.mp4')
     #
-    # subprocess.call(f'ffmpeg -y -i {get_mp4_path(audio_path)}.mp4 {get_mp4_path(audio_path)}.wav')
+    # subprocess.call(f'ffmpeg -y -i {get_path_without_mp4(audio_path)}.mp4 {get_path_without_mp4(audio_path)}.wav')
     #
     # #
-    # audio_file = AudioFile(f'{get_mp4_path(audio_path)}')
+    # audio_file = AudioFile(f'{get_path_without_mp4(audio_path)}')
     #
     # list_of_words = speech_to_words(audio_file, model_path)
     #

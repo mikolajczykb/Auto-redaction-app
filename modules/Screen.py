@@ -33,8 +33,8 @@ class Screen(Frame):
         return self.winfo_id()
 
     def reset_instance(self, _source):
-        self.instance = vlc.Instance()
-        self.player = self.instance.media_player_new()
+        # self.instance = vlc.Instance()
+        # self.player = self.instance.media_player_new()
         self.load_video(_source)
 
     def load_video(self, _source):
@@ -67,11 +67,10 @@ class Screen(Frame):
     def reverse_back(self):
         current_time = self.player.get_time()
         if self.player.will_play():
-            length_of_video = self.player.get_length()
-            if current_time - 5000 < length_of_video:
+            if current_time - 5000 > 0:
                 self.player.set_time(current_time - 5000)
             else:
-                self.player.set_time(length_of_video)
+                self.player.set_time(0)
 
     def get_current_time(self):
         return self.player.get_time()

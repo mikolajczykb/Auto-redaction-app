@@ -18,7 +18,7 @@ def create_wav_from_mp4(filepath: str):
     subprocess.call(f'ffmpeg -y -i "{filepath}.mp4" "{filepath}.wav"')
 
 
-def get_mp4_path(mp4_path: str):
+def get_path_without_mp4(mp4_path: str):
     return mp4_path[:-4] if mp4_path.endswith('.mp4') else "error"
 
 
@@ -78,32 +78,26 @@ class AudioFile:
 
     def __init__(self, filepath):
         # path of the file without the .mp4 extension
-        self.filepath = filepath
+        self.filepath: str = filepath
         # path of the directory the file is in
-        self.directory_path = get_directory_path(self.filepath)
-        self.audio = None
-        self.chunk = 1024
+        self.directory_path: str = get_directory_path(self.filepath)
         # list of words we load into the audiofile
-        self.list_of_words: List[Word] = None
-        # self.additional_times: List[TimeSegment] = []
+        self.list_of_words: List[Word] = []
 
-        # close PyAudio
-        # p.terminate()
-
-    def get_output_file_name(self, file_save_name=''):
+    def get_output_file_name(self, file_save_name: str = '') -> str:
         if file_save_name == '':
             file_save_name = self.filepath + '_output.mp4'
         else:
             file_save_name = f'{self.directory_path}/{file_save_name}'
         return file_save_name
 
-    def export(self, additional_times: List[TimeSegment], file_save_name=''):
-        inside = self.create_ffmpeg_string(additional_times)
+    def export(self, additional_times: List[TimeSegment], file_save_name: str = '') -> str:
+        inside: str = self.create_ffmpeg_string(additional_times)
         # if file_save_name == '':
         #     file_save_name = self.filepath + '_output.mp4'
         # else:
         #     file_save_name = f'{self.directory_path}/{file_save_name}'
-        file_save_name = self.get_output_file_name(file_save_name)
+        file_save_name: str = self.get_output_file_name(file_save_name)
         # current_time = time.time()
         print(self.filepath + ".mp4")
         print(inside)
@@ -127,13 +121,13 @@ class AudioFile:
         #     return 'Ffmpeg didnt export file'
         # return f'ffmpeg -y -i {self.filepath + ".mp4"} -af "{inside}" {file_save_name}'
 
-    def load_words(self, list_of_words):
+    def load_words(self, list_of_words: List[Word]) -> None:
         self.list_of_words = list_of_words
 
-    def get_words(self):
+    def get_words(self) -> List[Word]:
         return self.list_of_words
 
-    def sort_words_by(self, column, reverse):
+    def sort_words_by(self, column: str, reverse: bool) -> None:
         if column == 'start':
             self.list_of_words.sort(key=lambda word: getattr(word, 'time_segment').start.value, reverse=reverse)
         elif column == 'end':
@@ -146,7 +140,7 @@ class AudioFile:
                                        + additional_times
         all_times.sort(key=lambda x: x.start.value)
 
-        final_times = get_final_time(all_times)
+        final_times: List[TimeSegment] = get_final_time(all_times)
 
         # inside = "volume=enable='between(t,5,10)':volume=0, volume=enable='between(t,45,55)':volume=0"
 

@@ -3,6 +3,7 @@ import re
 from math import modf as math_modf
 import numpy as np
 
+
 # move this to class
 def convert_seconds_to_timestamp_format(seconds: float) -> str:
     frac, whole = math_modf(seconds)
@@ -59,34 +60,36 @@ class Word:
         self.confidence = config["conf"]
         self.time_segment = TimeSegment(config)
         self.word: str = config["word"]
-        if hasattr(config, 'is_censored'):
+        # if hasattr(config, 'is_censored'):
+        #     print("IS CENSORED IN WORD", config['is_censored'])
+        try:
             self.is_censored = config['is_censored']
-        else:
+        except KeyError:
             self.is_censored = False
 
     def __str__(self):
         return "{:20} from {:.2f} sec to {:.2f} sec, confidence is {:.2f}%" \
-            .format(self.word, self.time_segment.start, self.time_segment.end, self.confidence * 100)
+            .format(self.word, self.time_segment.start.value, self.time_segment.end.value, self.confidence * 100)
 
 
-if __name__ == "__main__":
-    timestamp1 = '00:01:590'
-    print('should return 1.590, ', convert_timestamp_to_second_format(timestamp1))
-
-    timestamp2 = '5:05'
-    print('should return 305', convert_timestamp_to_second_format(timestamp2))
-
-    timestamp3 = '00:08:500'
-    print('should return 8.5, ', convert_timestamp_to_second_format(timestamp3))
-
-    timestamp3_2 = '01:04:352'
-    print('should return 64.352, ', convert_timestamp_to_second_format(timestamp3_2))
-
-    timestamp3_3 = '00:00:000'
-    print(timestamp3_3, convert_timestamp_to_second_format(timestamp3_3))
-
-    timestamp4 = 127.54
-    print(timestamp4, convert_seconds_to_timestamp_format(timestamp4))
-
-    timestamp5 = 100.00
-    print(timestamp5, convert_seconds_to_timestamp_format(timestamp5))
+# if __name__ == "__main__":
+#     timestamp1 = '00:01:590'
+#     print('should return 1.590, ', convert_timestamp_to_second_format(timestamp1))
+#
+#     timestamp2 = '5:05'
+#     print('should return 305', convert_timestamp_to_second_format(timestamp2))
+#
+#     timestamp3 = '00:08:500'
+#     print('should return 8.5, ', convert_timestamp_to_second_format(timestamp3))
+#
+#     timestamp3_2 = '01:04:352'
+#     print('should return 64.352, ', convert_timestamp_to_second_format(timestamp3_2))
+#
+#     timestamp3_3 = '00:00:000'
+#     print(timestamp3_3, convert_timestamp_to_second_format(timestamp3_3))
+#
+#     timestamp4 = 127.54
+#     print(timestamp4, convert_seconds_to_timestamp_format(timestamp4))
+#
+#     timestamp5 = 100.00
+#     print(timestamp5, convert_seconds_to_timestamp_format(timestamp5))
